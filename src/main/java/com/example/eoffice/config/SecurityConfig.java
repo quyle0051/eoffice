@@ -40,6 +40,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/login", "/error").permitAll()
+                        //.requestMatchers("/api/users/**").hasRole("ADMIN") //dung cho phan quyen
                         .anyRequest().authenticated())
                 // chưa đăng nhập thì trả 401
                 .exceptionHandling(ex -> ex

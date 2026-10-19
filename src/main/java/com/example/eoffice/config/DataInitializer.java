@@ -10,25 +10,21 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.util.List;
+
 @Configuration
 public class DataInitializer {
 
+    private static final List<String> ROLES = List.of("ADMIN", "CLERK", "DIRECTOR", "HEAD", "DEPUTY", "OFFICE_CHIEF", "STAFF");
+
     @Bean
-    CommandLineRunner initData(UserRepository userRepository, RoleRepository roleRepository,
+    CommandLineRunner initData(UserRepository user, RoleRepository roles,
                                PasswordEncoder encoder) {
         return args -> {
-            Role adminRole = roleRepository.findByName("ADMIN")
-                    .orElseGet(() -> roleRepository.save(new Role("ADMIN")));
-
-            if (userRepository.findByEmail("admin@eoffice.com").isEmpty()) {
-                User u = new User();
-                u.setFullName("Quản trị viên");
-                u.setEmail("admin@eoffice.com");
-                u.setPassword(encoder.encode("123456"));
-                u.setPhone("0000000000");
-                u.setStatus(UserStatus.ACTIVE);
-                u.getRoles().add(adminRole);
-                userRepository.save(u);
+            for (String name : ROLES) {
+                if (roles.findByName(name).isEmpty()) {
+                    roles.save(new Role(name));
+                }
             }
         };
     }
