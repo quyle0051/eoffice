@@ -6,6 +6,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.util.HashSet;
+import java.util.Set;
+
 @Entity
 @Table(name = "departments")
 @Getter
@@ -31,11 +34,19 @@ public class Department {
     @JoinColumn(name = "head_id")
     private User head;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "deputy_id")
-    private User deputy;
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "department_deputies",
+            joinColumns = @JoinColumn(name = "department_id"),
+            inverseJoinColumns = @JoinColumn(name = "user_id")
+    )
+    private Set<User> deputies = new HashSet<>();
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "clerk_id")
-    private User clerk;
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "department_clerks",
+            joinColumns = @JoinColumn(name = "department_id"),
+            inverseJoinColumns = @JoinColumn(name = "user_id")
+    )
+    private Set<User> clerks = new HashSet<>();
 }

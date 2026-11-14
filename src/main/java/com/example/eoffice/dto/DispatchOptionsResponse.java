@@ -37,6 +37,8 @@ public class DispatchOptionsResponse {
         private Long deputyId;
         private String deputyName;
         private String deputyEmail;
+        private List<UserOption> deputies;
+        private List<UserOption> clerks;
     }
 
     @Getter

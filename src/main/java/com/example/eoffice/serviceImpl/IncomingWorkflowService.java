@@ -55,16 +55,32 @@ public class IncomingWorkflowService {
 
         List<DispatchOptionsResponse.DepartmentOption> depts = departmentRepository
                 .findAllByOrderByIdAsc()
-                .stream().map(d -> new DispatchOptionsResponse.DepartmentOption(
-                        d.getId(),
-                        d.getName(),
-                        d.getHead() != null ? d.getHead().getId() : null,
-                        d.getHead() != null ? d.getHead().getFullName() : null,
-                        d.getHead() != null ? d.getHead().getEmail() : null,
-                        d.getDeputy() != null ? d.getDeputy().getId() : null,
-                        d.getDeputy() != null ? d.getDeputy().getFullName() : null,
-                        d.getDeputy() != null ? d.getDeputy().getEmail() : null
-                )).toList();
+                .stream().map(d -> {
+                    List<DispatchOptionsResponse.UserOption> deputyList = (d.getDeputies() == null)
+                            ? List.of()
+                            : d.getDeputies().stream().map(this::toUserOption).toList();
+                    List<DispatchOptionsResponse.UserOption> clerkList = (d.getClerks() == null)
+                            ? List.of()
+                            : d.getClerks().stream().map(this::toUserOption).toList();
+
+                    Long firstDeputyId = deputyList.isEmpty() ? null : deputyList.get(0).getId();
+                    String allDeputyNames = deputyList.isEmpty() ? null :
+                            deputyList.stream().map(DispatchOptionsResponse.UserOption::getFullName).reduce((a, b) -> a + ", " + b).orElse(null);
+                    String firstDeputyEmail = deputyList.isEmpty() ? null : deputyList.get(0).getEmail();
+
+                    return new DispatchOptionsResponse.DepartmentOption(
+                            d.getId(),
+                            d.getName(),
+                            d.getHead() != null ? d.getHead().getId() : null,
+                            d.getHead() != null ? d.getHead().getFullName() : null,
+                            d.getHead() != null ? d.getHead().getEmail() : null,
+                            firstDeputyId,
+                            allDeputyNames,
+                            firstDeputyEmail,
+                            deputyList,
+                            clerkList
+                        );
+                }).toList();
 
         List<DispatchOptionsResponse.TaskGroupOption> groups = taskGroupRepository
                 .findAllByOrderByIdAsc()
@@ -313,8 +329,10 @@ public class IncomingWorkflowService {
                 if (sendHead && d.getHead() != null) {
                     assignees.put(d.getHead().getId(), d.getHead());
                 }
-                if (sendDeputy && d.getDeputy() != null) {
-                    assignees.put(d.getDeputy().getId(), d.getDeputy());
+                if (sendDeputy && d.getDeputies() != null) {
+                    for (User dp : d.getDeputies()) {
+                        assignees.put(dp.getId(), dp);
+                    }
                 }
             }
         }

@@ -83,4 +83,8 @@ public class Task {
 
     @Column(name = "dispatch_summary", columnDefinition = "LONGTEXT")
     private String dispatchSummary;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_task_id")
+    private Task parentTask;
 }
