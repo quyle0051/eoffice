@@ -6,8 +6,11 @@ import com.example.eoffice.dto.IncomingDocumentResponse;
 import com.example.eoffice.dto.IncomingWorkflowRequest;
 import com.example.eoffice.entity.*;
 import com.example.eoffice.repository.*;
+import com.example.eoffice.search.IncomingDocumentChangedEvent;
 import com.example.eoffice.service.IncomingDocumentService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,8 +35,10 @@ public class IncomingWorkflowService {
     private final TaskGroupRepository taskGroupRepository;
     private final IncomingDocumentService incomingDocumentService;
     private final ObjectMapper objectMapper;
+    private final ApplicationEventPublisher publisher;
 
     @Transactional(readOnly = true)
+    @Cacheable("dispatchOptions")
     public DispatchOptionsResponse getDispatchOptions() {
         List<DispatchOptionsResponse.UserOption> chiefs = userRepository
                 .findByRoleNameAndStatus("OFFICE_CHIEF", UserStatus.ACTIVE)
@@ -101,11 +106,12 @@ public class IncomingWorkflowService {
 
     @Transactional(readOnly = true)
     public IncomingDispatchRequest getDispatchState(Long docId) {
-        List<Task> tasks = taskRepository.findByIncomingDocumentIdOrderByIdDesc(docId);
-        if (tasks.isEmpty()) {
+        Task latestTask = taskRepository
+                .findFirstByIncomingDocumentIdAndParentTaskIsNullOrderByIdDesc(docId)
+                .orElse(null);
+        if (latestTask == null) {
             return null;
         }
-        Task latestTask = tasks.get(0);
         String summaryJson = latestTask.getDispatchSummary();
         if (summaryJson != null && summaryJson.trim().startsWith("{")) {
             try {
@@ -170,16 +176,21 @@ public class IncomingWorkflowService {
         }
 
         // Nếu văn bản đã có Task từ lần phân phối trước thì cập nhật lại Task đó, nếu chưa có thì tạo mới
-        List<Task> existingTasks = taskRepository.findByIncomingDocumentIdOrderByIdDesc(docId);
-        Task task = existingTasks.isEmpty() ? new Task() : existingTasks.get(0);
+        Task existingTask  = taskRepository
+                .findFirstByIncomingDocumentIdAndParentTaskIsNullOrderByIdDesc(docId)
+                .orElse(null);
+
+        Set<Long> previousMemberIds = new HashSet<>();
+        if (existingTask != null) {
+            collectMemberIds(existingTask, previousMemberIds);
+        }
+        Task task = (existingTask != null) ? existingTask : new Task();
 
         task.setTitle("Xử lý VB đến số " + doc.getArrivalNumber() + ": " + doc.getSubject());
         task.setIncomingDocument(doc);
         task.setTaskGroup(primaryGroup);
         task.setCreator(creator);
         task.setAssignee(mainAssignee);
-        task.setSupervisor(supervisors.stream().findFirst().orElse(null));
-        task.setSupporter(supporters.stream().findFirst().orElse(null));
         task.setSupervisors(supervisors);
         task.setSupporters(supporters);
         task.setStartTime(start);
@@ -201,6 +212,9 @@ public class IncomingWorkflowService {
         doc.getParticipants().addAll(supervisors);
         doc.getParticipants().addAll(supporters);
 
+        // Phân phối lại: thu hồi quyền xem của người không còn vai trò nào trong văn bản
+        pruneParticipants(doc, previousMemberIds);
+
         doc.setStatus(IncomingDocumentStatus.DISPATCHED);
         doc.setCurrentHandler(mainAssignee);
         String places = (req.getToPlacesSummary() != null && !req.getToPlacesSummary().isBlank())
@@ -211,8 +225,36 @@ public class IncomingWorkflowService {
         appendTraceLog(doc, "Văn thư " + creator.getFullName() + " phân phối giao việc",
                 "Chủ trì: " + mainAssignee.getFullName() + " | Phối hợp/Giám sát: " + places);
         docRepository.save(doc);
+        publisher.publishEvent(new IncomingDocumentChangedEvent(doc.getId()));
 
         return incomingDocumentService.findById(docId);
+    }
+
+    private static final Set<String> WORKFLOW_LEADER_ROLES = Set.of("OFFICE_CHIEF", "DIRECTOR", "DEPUTY_DIRECTOR");
+
+    private void collectMemberIds(Task t, Set<Long> ids) {
+        if (t.getAssignee() != null) ids.add(t.getAssignee().getId());
+        if (t.getSupervisors() != null) t.getSupervisors().forEach(u -> ids.add(u.getId()));
+        if (t.getSupporters() != null) t.getSupporters().forEach(u -> ids.add(u.getId()));
+    }
+
+    private void pruneParticipants(IncomingDocument doc, Set<Long> previousMemberIds) {
+        if (previousMemberIds.isEmpty()) return;
+
+        Set<Long> stillInvolved = new HashSet<>();
+        for (Task t : taskRepository.findByIncomingDocumentIdOrderByIdDesc(doc.getId())) {
+            collectMemberIds(t, stillInvolved);
+        }
+
+        doc.getParticipants().removeIf(u ->
+                previousMemberIds.contains(u.getId())
+                        && !stillInvolved.contains(u.getId())
+                        && !isWorkflowLeader(u));
+    }
+
+    private boolean isWorkflowLeader(User u) {
+        return u.getRoles() != null
+                && u.getRoles().stream().anyMatch(r -> WORKFLOW_LEADER_ROLES.contains(r.getName()));
     }
 
     private DispatchOptionsResponse.UserOption toUserOption(User u) {
@@ -252,6 +294,7 @@ public class IncomingWorkflowService {
 
         appendTraceLog(doc, "Văn thư " + sender.getFullName() + " -> " + chief.getFullName(), note);
         docRepository.save(doc);
+        publisher.publishEvent(new IncomingDocumentChangedEvent(doc.getId()));
 
         return incomingDocumentService.findById(docId);
     }
@@ -283,7 +326,7 @@ public class IncomingWorkflowService {
 
         appendTraceLog(doc, "Chánh VP " + sender.getFullName() + " -> GĐ " + director.getFullName(), req.getDirectiveNote().trim());
         docRepository.save(doc);
-
+        publisher.publishEvent(new IncomingDocumentChangedEvent(doc.getId()));
         return incomingDocumentService.findById(docId);
     }
 
@@ -307,7 +350,7 @@ public class IncomingWorkflowService {
 
         appendTraceLog(doc, "Giám đốc " + sender.getFullName() + " bút phê", req.getDirectiveNote().trim());
         docRepository.save(doc);
-
+        publisher.publishEvent(new IncomingDocumentChangedEvent(doc.getId()));
         return incomingDocumentService.findById(docId);
     }
 
@@ -378,8 +421,6 @@ public class IncomingWorkflowService {
             task.setIncomingDocument(doc);
             task.setCreator(creator);
             task.setAssignee(assignee);
-            task.setSupervisor(supervisor);
-            task.setSupporter(supporter);
             task.setProgressReportRequired(req.getProgressReportRequired() == null || req.getProgressReportRequired());
             task.setStartTime(start);
             task.setEndTime(end);
@@ -402,6 +443,7 @@ public class IncomingWorkflowService {
         doc.setToPlaces(placesStr);
         appendTraceLog(doc, "Văn thư " + creator.getFullName() + " phân phối cho [" + placesStr + "]", title);
         docRepository.save(doc);
+        publisher.publishEvent(new IncomingDocumentChangedEvent(doc.getId()));
 
         return incomingDocumentService.findById(docId);
     }

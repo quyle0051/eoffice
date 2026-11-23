@@ -1,10 +1,6 @@
 package com.example.eoffice.service;
 
-import com.example.eoffice.dto.PageResponse;
-import com.example.eoffice.dto.SubTaskCreateRequest;
-import com.example.eoffice.dto.TaskDetailResponse;
-import com.example.eoffice.dto.TaskResponse;
-import com.example.eoffice.dto.TaskPostResponse;
+import com.example.eoffice.dto.*;
 import com.example.eoffice.entity.TaskPostAttachment;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -30,4 +26,8 @@ public interface TaskService {
     TaskPostResponse.CommentDto addComment(Long taskId, Long postId, String content, String email);
 
     TaskPostAttachment getAttachmentForDownload(Long attachmentId, String email);
+
+    DispatchOptionsResponse getAssignableOptions(Long taskId, String email);
+
+    TaskDetailResponse finishTask(Long taskId, String email);
 }

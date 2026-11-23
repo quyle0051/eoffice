@@ -6,6 +6,8 @@ import com.example.eoffice.entity.DocumentBook;
 import com.example.eoffice.repository.DocumentBookRepository;
 import com.example.eoffice.service.DocumentBookService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +26,7 @@ public class DocumentBookServiceImpl implements DocumentBookService {
     //lấy danh sách
     @Override
     @Transactional(readOnly = true)
+    @Cacheable("documentBooks")
     public List<DocumentBookResponse> findAll() {
         //lay cac so chua bi xoa
         List<DocumentBook> books = documentBookRepository.findAllByDeletedFalseOrderByIdAsc();
@@ -46,6 +49,7 @@ public class DocumentBookServiceImpl implements DocumentBookService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "documentBooks", allEntries = true)
     public DocumentBookResponse create(DocumentBookRequest request) {
         DocumentBook book = new DocumentBook();
         copyFromRequest(book, request);
@@ -55,6 +59,7 @@ public class DocumentBookServiceImpl implements DocumentBookService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "documentBooks", allEntries = true)
     public DocumentBookResponse update(Long id, DocumentBookRequest request) {
         DocumentBook book = findBookOrThrow(id);
         copyFromRequest(book, request);
@@ -65,6 +70,7 @@ public class DocumentBookServiceImpl implements DocumentBookService {
     //Xóa sổ (xóa mềm)
     @Override
     @Transactional
+    @CacheEvict(value = "documentBooks", allEntries = true)
     public void delete(Long id) {
         DocumentBook book = findBookOrThrow(id);
         boolean hasChildren = documentBookRepository.existsByParentIdAndDeletedFalse(id);

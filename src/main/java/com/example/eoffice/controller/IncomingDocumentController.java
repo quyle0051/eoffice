@@ -3,10 +3,12 @@ package com.example.eoffice.controller;
 import com.example.eoffice.dto.*;
 import com.example.eoffice.entity.IncomingDocument;
 import com.example.eoffice.repository.IncomingDocumentRepository;
+import com.example.eoffice.search.IncomingDocumentChangedEvent;
 import com.example.eoffice.service.IncomingDocumentService;
 import com.example.eoffice.serviceImpl.IncomingWorkflowService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -37,20 +39,12 @@ public class IncomingDocumentController {
     private final IncomingDocumentService service;
     private final IncomingWorkflowService workflowService;
     private final IncomingDocumentRepository docRepository;
+    private final ApplicationEventPublisher publisher;
 
     private final Path uploadDir = Paths.get("uploads/incoming");
     @GetMapping
-    public PageResponse<IncomingDocumentResponse> search(
-            @RequestParam(name = "keyword", required = false) String keyword,
-            @RequestParam(name = "documentBookId", required = false) Long documentBookId,
-            @RequestParam(name = "documentTypeId", required = false) Long documentTypeId,
-            @RequestParam(name = "arrivalFrom", required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate arrivalFrom,
-            @RequestParam(name = "arrivalTo", required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate arrivalTo,
-            @RequestParam(name = "page", defaultValue = "0") int page,
-            @RequestParam(name = "size", defaultValue = "10") int size) {
-        return service.search(keyword, documentBookId, documentTypeId, arrivalFrom, arrivalTo, page, size);
+    public PageResponse<IncomingDocumentResponse> search(IncomingSearchRequest request) {
+        return service.search(request);
     }
 
     @GetMapping("/{id:\\d+}")
@@ -130,6 +124,7 @@ public class IncomingDocumentController {
             doc.setAttachmentName(originalName);
             doc.setAttachmentPath(target.toString());
             docRepository.save(doc);
+            publisher.publishEvent(new IncomingDocumentChangedEvent(id));
             return service.findById(id);
         } catch (IOException e) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Không thể lưu file đính kèm");

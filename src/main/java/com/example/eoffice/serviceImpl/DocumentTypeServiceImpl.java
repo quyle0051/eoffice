@@ -5,6 +5,7 @@ import com.example.eoffice.entity.DocumentType;
 import com.example.eoffice.repository.DocumentTypeRepository;
 import com.example.eoffice.service.DocumentTypeService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -17,6 +18,7 @@ public class DocumentTypeServiceImpl implements DocumentTypeService {
     private final DocumentTypeRepository repository;
 
     @Override
+    @Cacheable("documentTypes")
     public List<DocumentTypeResponse> findAll() {
         List<DocumentType> types = repository.findAllByOrderByIdAsc();
 

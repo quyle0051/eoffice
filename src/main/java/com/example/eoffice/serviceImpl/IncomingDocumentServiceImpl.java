@@ -3,15 +3,21 @@ package com.example.eoffice.serviceImpl;
 
 import com.example.eoffice.dto.IncomingDocumentRequest;
 import com.example.eoffice.dto.IncomingDocumentResponse;
+import com.example.eoffice.dto.IncomingSearchRequest;
 import com.example.eoffice.dto.PageResponse;
 import com.example.eoffice.entity.DocumentBook;
 import com.example.eoffice.entity.DocumentType;
 import com.example.eoffice.entity.IncomingDocument;
+import com.example.eoffice.entity.IncomingDocumentStatus;
 import com.example.eoffice.repository.DocumentBookRepository;
 import com.example.eoffice.repository.DocumentTypeRepository;
 import com.example.eoffice.repository.IncomingDocumentRepository;
+import com.example.eoffice.repository.TaskRepository;
+import com.example.eoffice.search.IncomingDocumentChangedEvent;
+import com.example.eoffice.search.IncomingSearchService;
 import com.example.eoffice.service.IncomingDocumentService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -21,11 +27,16 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class IncomingDocumentServiceImpl implements IncomingDocumentService {
@@ -35,27 +46,54 @@ public class IncomingDocumentServiceImpl implements IncomingDocumentService {
     private final IncomingDocumentRepository repository;
     private final DocumentBookRepository bookRepository;
     private final DocumentTypeRepository typeRepository;
+    private final TaskRepository taskRepository;
+    private final ApplicationEventPublisher publisher;
+    private final IncomingSearchService searchService;
+
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<IncomingDocumentResponse> search(String keyword, Long documentBookId, Long documentTypeId, LocalDate arrivalFrom, LocalDate arrivalTo, int page, int size) {
-        int safePage = Math.max(page, 0);
-        int safeSize = (size <= 0) ? 10 : Math.min(size, 100);
+    public PageResponse<IncomingDocumentResponse> search(IncomingSearchRequest req) {
+        String viewerEmail = resolveRestrictedViewerEmail();
+        try {
+            // Ưu tiên Elasticsearch: tìm toàn văn, bỏ dấu tiếng Việt, xếp theo độ liên quan
+            IncomingSearchService.IdPage found = searchService.search(req, viewerEmail);
+            Map<Long, IncomingDocument> byId = repository.findAllByIdInAndDeletedFalse(found.ids()).stream()
+                    .collect(Collectors.toMap(IncomingDocument::getId, d -> d));
+            List<IncomingDocumentResponse> content = found.ids().stream()
+                    .map(byId::get)
+                    .filter(Objects::nonNull)
+                    .map(this::toResponse)
+                    .toList();
+            int size = Math.min(Math.max(req.getSize(), 1), 100);
+            int totalPages = (int) Math.ceil(found.total() / (double) size);
+            return new PageResponse<>(content, Math.max(req.getPage(), 0), size, found.total(), totalPages);
+        } catch (Exception e) {
+            // Elasticsearch không dùng được thì quay về tìm kiếm cơ bản bằng MySQL
+            log.warn("Elasticsearch lỗi, chuyển sang tìm kiếm MySQL: {}", e.getMessage());
+            return searchInMySql(req, viewerEmail);
+        }
+    }
+
+    /** Phương án dự phòng: chỉ hỗ trợ từ khóa, sổ, loại và khoảng ngày đến. */
+    public PageResponse<IncomingDocumentResponse> searchInMySql(IncomingSearchRequest req, String viewerEmail) {
+        int safePage = Math.max(req.getPage(), 0);
+        int safeSize = (req.getSize() <= 0) ? 10 : Math.min(req.getSize(), 100);
         Pageable pageable = PageRequest.of(safePage, safeSize);
 
         String searchPattern = null;
-        String cleaned = cleanText(keyword);
+        String cleaned = cleanText(req.getKeyword());
         if (cleaned != null) {
             searchPattern = "%" + cleaned.toLowerCase() + "%";
         }
-        String viewerEmail = resolveRestrictedViewerEmail();
+
 
         Page<IncomingDocument> docPage = repository.search(
                 searchPattern,
-                documentBookId,
-                documentTypeId,
-                arrivalFrom,
-                arrivalTo,
+                req.getDocumentBookId(),
+                req.getDocumentTypeId(),
+                req.getArrivalFrom(),
+                req.getArrivalTo(),
                 viewerEmail,
                 pageable
         );
@@ -123,6 +161,7 @@ public class IncomingDocumentServiceImpl implements IncomingDocumentService {
         }
 
         IncomingDocument saved = repository.save(doc);
+        publisher.publishEvent(new IncomingDocumentChangedEvent(saved.getId()));
         return toResponse(saved);
     }
 
@@ -150,15 +189,21 @@ public class IncomingDocumentServiceImpl implements IncomingDocumentService {
         checkDates(doc);
 
         IncomingDocument saved = repository.save(doc);
+        publisher.publishEvent(new IncomingDocumentChangedEvent(saved.getId()));
         return toResponse(saved);
     }
 
     @Override
+    @Transactional
     public void delete(Long id) {
         IncomingDocument doc = findDocOrThrow(id);
-
+        if (doc.getStatus() != IncomingDocumentStatus.NEW || taskRepository.existsByIncomingDocumentId(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Văn bản đã được trình hoặc phân phối, không thể xóa");
+        }
         doc.setDeleted(true);
         repository.save(doc);
+        publisher.publishEvent(new IncomingDocumentChangedEvent(doc.getId()));
     }
 
     private IncomingDocument findDocOrThrow(Long id) {

@@ -49,12 +49,23 @@ public class TaskController {
         return taskService.getDetail(id, auth.getName());
     }
 
+    @GetMapping("/{id:\\d+}/assignable-options")
+    public DispatchOptionsResponse getAssignableOptions(@PathVariable("id") Long id, Authentication auth) {
+        return taskService.getAssignableOptions(id, auth.getName());
+    }
+
     //Cập nhật nhanh trạng thái công việc
     @PutMapping("/{id:\\d+}/status")
     public TaskDetailResponse updateStatus(@PathVariable("id") Long id,
                                            @RequestBody Map<String, String> body,
                                            Authentication auth) {
         return taskService.updateStatus(id, body.get("status"), auth.getName());
+    }
+
+    // Kết thúc công việc (chỉ Người chủ trì)
+    @PostMapping("/{id:\\d+}/finish")
+    public TaskDetailResponse finishTask(@PathVariable("id") Long id, Authentication auth) {
+        return taskService.finishTask(id, auth.getName());
     }
 
     //Người chủ trì chia nhỏ công việc thành việc con (Sub-task)

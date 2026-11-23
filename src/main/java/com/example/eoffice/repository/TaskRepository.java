@@ -1,5 +1,6 @@
 package com.example.eoffice.repository;
 
+import com.example.eoffice.dto.DispatchOptionsResponse;
 import com.example.eoffice.entity.Task;
 import com.example.eoffice.entity.TaskStatus;
 import org.springframework.data.domain.Page;
@@ -49,4 +50,9 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
             "parentTask", "taskGroup", "incomingDocument", "creator", "assignee", "supervisors", "supporters"
     })
     List<Task> findByParentTaskIdOrderByIdAsc(Long parentTaskId);
+
+    Optional<Task> findFirstByIncomingDocumentIdAndParentTaskIsNullOrderByIdDesc(Long incomingDocumentId);
+
+    boolean existsByIncomingDocumentId(Long incomingDocumentId);
+
 }

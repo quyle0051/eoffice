@@ -2,14 +2,13 @@ package com.example.eoffice.service;
 
 import com.example.eoffice.dto.IncomingDocumentRequest;
 import com.example.eoffice.dto.IncomingDocumentResponse;
+import com.example.eoffice.dto.IncomingSearchRequest;
 import com.example.eoffice.dto.PageResponse;
 
 import java.time.LocalDate;
 
 public interface IncomingDocumentService {
-    PageResponse<IncomingDocumentResponse> search(String keyword, Long documentBookId, Long documentTypeId,
-                                                  LocalDate arrivalFrom, LocalDate arrivalTo,
-                                                  int page, int size);
+    PageResponse<IncomingDocumentResponse> search(IncomingSearchRequest request);
 
     IncomingDocumentResponse findById(Long id);
 

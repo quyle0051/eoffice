@@ -2,6 +2,7 @@ package com.example.eoffice.service;
 
 import com.example.eoffice.dto.OutgoingDocumentRequest;
 import com.example.eoffice.dto.OutgoingDocumentResponse;
+import com.example.eoffice.dto.OutgoingSearchRequest;
 import com.example.eoffice.dto.PageResponse;
 import com.example.eoffice.entity.Organ;
 import com.example.eoffice.entity.OutgoingDocument;
@@ -12,8 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 public interface OutgoingDocumentService {
-    PageResponse<OutgoingDocumentResponse> search(String keyword, Long bookId, Long typeId, String status,
-                                                  LocalDate fromDate, LocalDate toDate, int page, int size);
+    PageResponse<OutgoingDocumentResponse> search(OutgoingSearchRequest request);
 
     OutgoingDocumentResponse findById(Long id);
 

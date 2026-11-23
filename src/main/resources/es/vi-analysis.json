@@ -1,0 +1,11 @@
+{
+  "analysis": {
+    "filter": {
+      "edge_2_15": { "type": "edge_ngram", "min_gram": 2, "max_gram": 15 }
+    },
+    "analyzer": {
+      "vi_fold":   { "tokenizer": "standard", "filter": ["lowercase", "asciifolding"] },
+      "vi_prefix": { "tokenizer": "standard", "filter": ["lowercase", "asciifolding", "edge_2_15"] }
+    }
+  }
+}

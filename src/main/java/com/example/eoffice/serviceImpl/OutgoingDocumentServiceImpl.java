@@ -2,11 +2,17 @@ package com.example.eoffice.serviceImpl;
 
 import com.example.eoffice.dto.OutgoingDocumentRequest;
 import com.example.eoffice.dto.OutgoingDocumentResponse;
+import com.example.eoffice.dto.OutgoingSearchRequest;
 import com.example.eoffice.dto.PageResponse;
 import com.example.eoffice.entity.*;
 import com.example.eoffice.repository.*;
+import com.example.eoffice.search.OutgoingDocumentChangedEvent;
+import com.example.eoffice.search.OutgoingSearchService;
 import com.example.eoffice.service.OutgoingDocumentService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -24,7 +30,9 @@ import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class OutgoingDocumentServiceImpl implements OutgoingDocumentService {
@@ -34,25 +42,48 @@ public class OutgoingDocumentServiceImpl implements OutgoingDocumentService {
     private final DocumentTypeRepository typeRepository;
     private final OrganRepository organRepository;
     private final UserRepository userRepository;
+    private final ApplicationEventPublisher publisher;
+    private final OutgoingSearchService searchService;
 
     private final Path uploadDir = Paths.get("uploads/outgoing");
 
+
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<OutgoingDocumentResponse> search(String keyword, Long bookId, Long typeId, String status,
-                                                         LocalDate fromDate, LocalDate toDate, int page, int size) {
-        String kw = (keyword != null && !keyword.trim().isEmpty()) ? "%" + keyword.trim().toLowerCase() + "%" : null;
+    public PageResponse<OutgoingDocumentResponse> search(OutgoingSearchRequest req) {
+        try {
+            // Ưu tiên Elasticsearch: tìm toàn văn, bỏ dấu tiếng Việt, xếp theo độ liên quan
+            OutgoingSearchService.IdPage found = searchService.search(req);
+            Map<Long, OutgoingDocument> byId = outgoingRepository.findAllByIdInAndDeletedFalse(found.ids()).stream()
+                    .collect(Collectors.toMap(OutgoingDocument::getId, d -> d));
+            List<OutgoingDocumentResponse> content = found.ids().stream()
+                    .map(byId::get)
+                    .filter(Objects::nonNull)
+                    .map(this::toResponse)
+                    .toList();
+            int size = Math.min(Math.max(req.getSize(), 1), 100);
+            int totalPages = (int) Math.ceil(found.total() / (double) size);
+            return new PageResponse<>(content, Math.max(req.getPage(), 0), size, found.total(), totalPages);
+        } catch (Exception e) {
+            // Elasticsearch không dùng được thì quay về tìm kiếm cơ bản bằng MySQL
+            log.warn("Elasticsearch lỗi, chuyển sang tìm kiếm MySQL: {}", e.getMessage());
+            return searchInMySql(req);
+        }
+    }
+
+    public PageResponse<OutgoingDocumentResponse> searchInMySql(OutgoingSearchRequest req) {
+        String kw = (req.getKeyword() != null && !req.getKeyword().trim().isEmpty()) ? "%" + req.getKeyword().trim().toLowerCase() + "%" : null;
 
         OutgoingDocumentStatus statusEnum = null;
-        if (status != null && !status.trim().isEmpty()) {
+        if (req.getStatus() != null && !req.getStatus().trim().isEmpty()) {
             try {
-                statusEnum = OutgoingDocumentStatus.valueOf(status.trim().toUpperCase());
+                statusEnum = OutgoingDocumentStatus.valueOf(req.getStatus().trim().toUpperCase());
             } catch (IllegalArgumentException ignored) {
             }
         }
 
-        Pageable pageable = PageRequest.of(Math.max(page, 0), size <= 0 ? 10 : Math.min(size, 100));
-        Page<OutgoingDocument> p = outgoingRepository.search(kw, bookId, typeId, statusEnum, fromDate, toDate, pageable);
+        Pageable pageable = PageRequest.of(Math.max(req.getPage(), 0), req.getSize() <= 0 ? 10 : Math.min(req.getSize(), 100));
+        Page<OutgoingDocument> p = outgoingRepository.search(kw, req.getBookId(), req.getTypeId(), statusEnum, req.getFromDate(), req.getToDate(), pageable);
 
         List<OutgoingDocumentResponse> content = p.getContent().stream().map(this::toResponse).toList();
         return new PageResponse<>(content, p.getNumber(), p.getSize(), p.getTotalElements(), p.getTotalPages());
@@ -76,9 +107,7 @@ public class OutgoingDocumentServiceImpl implements OutgoingDocumentService {
         String typeShort = "CV";
         if (typeId != null) {
             typeShort = typeRepository.findById(typeId)
-                    .map(DocumentType::getAbbreviation)
-                    .filter(a -> !a.isBlank())
-                    .map(a -> a.trim().toUpperCase())
+                    .map(t -> t.getAbbreviation() != null && !t.getAbbreviation().isBlank() ? t.getAbbreviation().trim().toUpperCase() : "VB")
                     .orElse("VB");
         }
 
@@ -122,6 +151,7 @@ public class OutgoingDocumentServiceImpl implements OutgoingDocumentService {
         }
 
         OutgoingDocument saved = outgoingRepository.save(doc);
+        publisher.publishEvent(new OutgoingDocumentChangedEvent(saved.getId()));
         return toResponse(saved);
     }
 
@@ -147,7 +177,7 @@ public class OutgoingDocumentServiceImpl implements OutgoingDocumentService {
             });
         }
 
-        return toResponse(outgoingRepository.save(doc));
+        return saveAndNotify(doc);
     }
 
     @Override
@@ -168,7 +198,7 @@ public class OutgoingDocumentServiceImpl implements OutgoingDocumentService {
 
             doc.setAttachmentName(originalName);
             doc.setAttachmentPath(target.toString());
-            return toResponse(outgoingRepository.save(doc));
+            return saveAndNotify(doc);
         } catch (IOException e) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Không thể lưu tệp văn bản đi");
         }
@@ -224,7 +254,7 @@ public class OutgoingDocumentServiceImpl implements OutgoingDocumentService {
                         }
                     });
         }
-        return toResponse(outgoingRepository.save(doc));
+        return saveAndNotify(doc);
     }
 
     /** Lưu trữ văn bản đi */
@@ -244,8 +274,15 @@ public class OutgoingDocumentServiceImpl implements OutgoingDocumentService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy văn bản đi"));
         doc.setDeleted(true);
         outgoingRepository.save(doc);
+        publisher.publishEvent(new OutgoingDocumentChangedEvent(doc.getId()));
     }
 
+    /** Lưu văn bản, báo cho bộ đồng bộ Elasticsearch rồi trả về dữ liệu hiển thị. */
+    private OutgoingDocumentResponse saveAndNotify(OutgoingDocument doc) {
+        OutgoingDocument saved = outgoingRepository.save(doc);
+        publisher.publishEvent(new OutgoingDocumentChangedEvent(saved.getId()));
+        return toResponse(saved);
+    }
     // --- HÀM HELPER ÁNH XẠ DỮ LIỆU ---
 
     private void applyRequestToEntity(OutgoingDocument doc, OutgoingDocumentRequest req, DocumentBook book, DocumentType type) {

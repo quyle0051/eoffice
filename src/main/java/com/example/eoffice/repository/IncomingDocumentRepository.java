@@ -9,6 +9,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public interface IncomingDocumentRepository extends JpaRepository<IncomingDocument, Long> {
@@ -42,6 +44,13 @@ public interface IncomingDocumentRepository extends JpaRepository<IncomingDocume
 
     @EntityGraph(attributePaths = {"documentBook", "documentType", "currentHandler", "participants"})
     Optional<IncomingDocument> findByIdAndDeletedFalse(Long id);
+
+    /** Dùng để dựng lại index Elasticsearch theo từng lô. */
+    Page<IncomingDocument> findByDeletedFalse(Pageable pageable);
+
+    /** Nạp đầy đủ các văn bản theo danh sách ID (kết quả tìm từ Elasticsearch). */
+    @EntityGraph(attributePaths = {"documentBook", "documentType", "currentHandler"})
+    List<IncomingDocument> findAllByIdInAndDeletedFalse(Collection<Long> ids);
 
     @Query("""
             select max(d.arrivalNumber) from IncomingDocument d

@@ -39,14 +39,6 @@ public class Task {
     @JoinColumn(name = "assignee_id", nullable = false)
     private User assignee;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "supervisor_id")
-    private User supervisor;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "supporter_id")
-    private User supporter;
-
     /** Danh sách nhiều Người giám sát */
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(

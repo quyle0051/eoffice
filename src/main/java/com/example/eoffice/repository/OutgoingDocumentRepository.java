@@ -10,6 +10,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public interface OutgoingDocumentRepository extends JpaRepository<OutgoingDocument, Long> {
@@ -19,6 +21,13 @@ public interface OutgoingDocumentRepository extends JpaRepository<OutgoingDocume
 
     /** Đếm số lượng văn bản đi trong cùng 1 Sổ văn bản đi để tự động gợi ý Số văn bản đi tiếp theo */
     long countByDocumentBookIdAndDeletedFalse(Long documentBookId);
+
+    /** Dùng để dựng lại index Elasticsearch theo từng lô. */
+    Page<OutgoingDocument> findByDeletedFalse(Pageable pageable);
+
+    /** Nạp đầy đủ các văn bản theo danh sách ID (kết quả tìm từ Elasticsearch). */
+    @EntityGraph(attributePaths = {"documentBook", "documentType", "createdBy"})
+    List<OutgoingDocument> findAllByIdInAndDeletedFalse(Collection<Long> ids);
 
     @EntityGraph(attributePaths = {"documentBook", "documentType", "createdBy"})
     @Query("""

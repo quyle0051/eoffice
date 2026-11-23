@@ -2,6 +2,7 @@ package com.example.eoffice.controller;
 
 import com.example.eoffice.dto.OutgoingDocumentRequest;
 import com.example.eoffice.dto.OutgoingDocumentResponse;
+import com.example.eoffice.dto.OutgoingSearchRequest;
 import com.example.eoffice.dto.PageResponse;
 import com.example.eoffice.entity.Organ;
 import com.example.eoffice.entity.OutgoingDocument;
@@ -38,16 +39,8 @@ public class OutgoingDocumentController {
     private final OutgoingDocumentService outgoingService;
 
     @GetMapping
-    public PageResponse<OutgoingDocumentResponse> search(
-            @RequestParam(name = "keyword", required = false) String keyword,
-            @RequestParam(name = "bookId", required = false) Long bookId,
-            @RequestParam(name = "typeId", required = false) Long typeId,
-            @RequestParam(name = "status", required = false) String status,
-            @RequestParam(name = "fromDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
-            @RequestParam(name = "toDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate,
-            @RequestParam(name = "page", defaultValue = "0") int page,
-            @RequestParam(name = "size", defaultValue = "10") int size) {
-        return outgoingService.search(keyword, bookId, typeId, status, fromDate, toDate, page, size);
+    public PageResponse<OutgoingDocumentResponse> search(OutgoingSearchRequest request) {
+        return outgoingService.search(request);
     }
 
     /** Chức năng 2: Tự động gợi ý Số văn bản đi & Ký hiệu khi chọn Sổ và Loại văn bản */
