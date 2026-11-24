@@ -29,6 +29,10 @@ public class SearchStartup implements ApplicationRunner {
                 log.info("Chưa có index outgoing_documents, bắt đầu dựng từ MySQL...");
                 log.info("Đã dựng xong index outgoing_documents: {} văn bản", outgoingReindexService.reindexAll());
             }
+            if (!operations.indexOps(InternalDocumentIndex.class).exists()) {
+                log.info("Chưa có index internal_documents, bắt đầu dựng từ MySQL...");
+                log.info("Đã dựng xong index internal_documents: {} văn bản", internalReindexService.reindexAll());
+            }
         } catch (Exception e) {
             log.warn("Elasticsearch chưa sẵn sàng, hệ thống dùng tìm kiếm MySQL: {}", e.getMessage());
         }

@@ -34,6 +34,7 @@ public class SearchAdminController {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("incomingDocuments", incomingReindexService.reindexAll());
         result.put("outgoingDocuments", outgoingReindexService.reindexAll());
+        result.put("internalDocuments", internalReindexService.reindexAll());
         return result;
     }
 }
