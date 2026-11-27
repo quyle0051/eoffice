@@ -130,8 +130,10 @@ public class OutgoingDocumentServiceImpl implements OutgoingDocumentService {
     public OutgoingDocumentResponse create(OutgoingDocumentRequest req, String email) {
         DocumentBook book = bookRepository.findById(req.getDocumentBookId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sổ văn bản đi không tồn tại"));
+                requireBookType(book, "OUTGOING", "Sổ đã chọn không phải sổ văn bản đi");
         DocumentType type = typeRepository.findById(req.getDocumentTypeId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Loại văn bản không tồn tại"));
+
         User creator = userRepository.findByEmail(email).orElse(null);
 
         OutgoingDocument doc = new OutgoingDocument();
@@ -162,6 +164,7 @@ public class OutgoingDocumentServiceImpl implements OutgoingDocumentService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy văn bản đi"));
         DocumentBook book = bookRepository.findById(req.getDocumentBookId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sổ văn bản đi không tồn tại"));
+                requireBookType(book, "OUTGOING", "Sổ đã chọn không phải sổ văn bản đi");
         DocumentType type = typeRepository.findById(req.getDocumentTypeId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Loại văn bản không tồn tại"));
 
@@ -265,6 +268,13 @@ public class OutgoingDocumentServiceImpl implements OutgoingDocumentService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy văn bản đi"));
         doc.setStatus(OutgoingDocumentStatus.ARCHIVED);
         return toResponse(outgoingRepository.save(doc));
+    }
+
+    /** Sổ được chọn phải đúng loại (văn bản đi). */
+    private void requireBookType(DocumentBook book, String typeCode, String message) {
+        if (book.getBookType() == null || !typeCode.equals(book.getBookType().getCode())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+        }
     }
 
     @Override

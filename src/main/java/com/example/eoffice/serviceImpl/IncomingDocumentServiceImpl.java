@@ -155,11 +155,6 @@ public class IncomingDocumentServiceImpl implements IncomingDocumentService {
 
         doc.setArrivalNumber(nextArrivalNumber(book.getId(), doc.getArrivalDate()));
 
-
-        if (doc.getDueDate() == null && book.getStandardDays() != null) {
-            doc.setDueDate(doc.getArrivalDate().plusDays(book.getStandardDays()));
-        }
-
         IncomingDocument saved = repository.save(doc);
         publisher.publishEvent(new IncomingDocumentChangedEvent(saved.getId()));
         return toResponse(saved);

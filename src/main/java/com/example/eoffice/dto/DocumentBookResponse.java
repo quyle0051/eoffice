@@ -10,7 +10,9 @@ public class DocumentBookResponse {
     private Long id;
     private String name;
     private String shortName;
-    private Integer standardDays;
     private Long parentId;
     private String parentName;
+    private Long bookTypeId;
+    private String bookTypeCode;
+    private String bookTypeName;
 }

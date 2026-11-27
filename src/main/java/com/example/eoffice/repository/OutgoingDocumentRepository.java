@@ -22,6 +22,8 @@ public interface OutgoingDocumentRepository extends JpaRepository<OutgoingDocume
     /** Đếm số lượng văn bản đi trong cùng 1 Sổ văn bản đi để tự động gợi ý Số văn bản đi tiếp theo */
     long countByDocumentBookIdAndDeletedFalse(Long documentBookId);
 
+    boolean existsByDocumentBookIdAndDeletedFalse(Long bookId);
+    
     /** Dùng để dựng lại index Elasticsearch theo từng lô. */
     Page<OutgoingDocument> findByDeletedFalse(Pageable pageable);
 

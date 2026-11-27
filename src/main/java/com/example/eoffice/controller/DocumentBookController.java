@@ -19,8 +19,8 @@ public class DocumentBookController {
     private final DocumentBookServiceImpl  service;
 
     @GetMapping
-    public List<DocumentBookResponse> findAll() {
-        return service.findAll();
+    public List<DocumentBookResponse> findAll(@RequestParam(name = "type", required = false) String type) {
+        return service.findAll(type);
     }
 
     @GetMapping("/{id}")

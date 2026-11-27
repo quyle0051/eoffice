@@ -14,8 +14,23 @@ import java.util.List;
 import java.util.Optional;
 
 public interface TaskRepository extends JpaRepository<Task, Long> {
+    @EntityGraph(attributePaths = {
+            "taskGroup", "incomingDocument", "creator", "assignee", "supervisors", "supporters"
+    })
+    Optional<Task> findWithDetailsById(Long id);
+
+    @EntityGraph(attributePaths = {
+            "parentTask", "taskGroup", "incomingDocument", "creator", "assignee", "supervisors", "supporters"
+    })
+    List<Task> findByParentTaskIdOrderByIdAsc(Long parentTaskId);
+
+    Optional<Task> findFirstByIncomingDocumentIdAndParentTaskIsNullOrderByIdDesc(Long incomingDocumentId);
+
+    boolean existsByIncomingDocumentId(Long incomingDocumentId);
 
     List<Task> findByIncomingDocumentIdOrderByIdDesc(Long incomingDocumentId);
+
+    boolean existsByTaskGroupId(Long taskGroupId);
 
     @EntityGraph(attributePaths = {
             "parentTask", "taskGroup", "incomingDocument", "creator", "assignee", "supervisors", "supporters"
@@ -40,19 +55,4 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
                            @Param("keyword") String keyword,
                            @Param("status") TaskStatus status,
                            Pageable pageable);
-
-    @EntityGraph(attributePaths = {
-            "taskGroup", "incomingDocument", "creator", "assignee", "supervisors", "supporters"
-    })
-    Optional<Task> findWithDetailsById(Long id);
-
-    @EntityGraph(attributePaths = {
-            "parentTask", "taskGroup", "incomingDocument", "creator", "assignee", "supervisors", "supporters"
-    })
-    List<Task> findByParentTaskIdOrderByIdAsc(Long parentTaskId);
-
-    Optional<Task> findFirstByIncomingDocumentIdAndParentTaskIsNullOrderByIdDesc(Long incomingDocumentId);
-
-    boolean existsByIncomingDocumentId(Long incomingDocumentId);
-
 }

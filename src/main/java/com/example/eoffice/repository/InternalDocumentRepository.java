@@ -26,6 +26,8 @@ public interface InternalDocumentRepository extends JpaRepository<InternalDocume
     @EntityGraph(attributePaths = {"documentBook", "documentType", "createdBy"})
     List<InternalDocument> findAllByIdInAndDeletedFalse(Collection<Long> ids);
 
+    boolean existsByDocumentBookIdAndDeletedFalse(Long bookId);
+
     /** Số thứ tự lớn nhất trong sổ và năm (tính cả văn bản đã xóa mềm để số không bị cấp lại). */
     @Query("""
             select max(d.serialNumber) from InternalDocument d

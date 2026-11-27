@@ -12,9 +12,13 @@ import java.util.List;
 import java.util.Optional;
 
 public interface DocumentBookRepository extends JpaRepository<DocumentBook, Long> {
-    @EntityGraph(attributePaths = "parent")
+    @EntityGraph(attributePaths = {"parent", "bookType"})
     List<DocumentBook> findAllByDeletedFalseOrderByIdAsc();
 
+    @EntityGraph(attributePaths = {"parent", "bookType"})
+    List<DocumentBook> findAllByBookTypeCodeAndDeletedFalseOrderByIdAsc(String code);
+
+    @EntityGraph(attributePaths = {"parent", "bookType"})
     Optional<DocumentBook> findByIdAndDeletedFalse(Long id);
 
     boolean existsByParentIdAndDeletedFalse(Long parentId);

@@ -3,7 +3,8 @@ package com.example.eoffice.serviceImpl;
 import com.example.eoffice.dto.DocumentBookRequest;
 import com.example.eoffice.dto.DocumentBookResponse;
 import com.example.eoffice.entity.DocumentBook;
-import com.example.eoffice.repository.DocumentBookRepository;
+import com.example.eoffice.entity.DocumentBookType;
+import com.example.eoffice.repository.*;
 import com.example.eoffice.service.DocumentBookService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
@@ -22,21 +23,25 @@ import java.util.Optional;
 public class DocumentBookServiceImpl implements DocumentBookService {
 
     private final DocumentBookRepository documentBookRepository;
+    private final DocumentBookTypeRepository bookTypeRepository;
+    private final IncomingDocumentRepository incomingRepository;
+    private final OutgoingDocumentRepository outgoingRepository;
+    private final InternalDocumentRepository internalRepository;
 
     //lấy danh sách
     @Override
     @Transactional(readOnly = true)
-    @Cacheable("documentBooks")
-    public List<DocumentBookResponse> findAll() {
-        //lay cac so chua bi xoa
-        List<DocumentBook> books = documentBookRepository.findAllByDeletedFalseOrderByIdAsc();
-
-        //đổi sang dạng trả về cho angular
-        List<DocumentBookResponse> result = new ArrayList<>();
-        for (DocumentBook book : books) {
-            result.add(toResponse(book));
+    @Cacheable(value = "documentBooks",
+            key = "#typeCode == null || #typeCode.isBlank() ? 'ALL' : #typeCode.trim().toUpperCase()")
+    public List<DocumentBookResponse> findAll(String typeCode) {
+        List<DocumentBook> books;
+        if (typeCode == null || typeCode.isBlank()) {
+            books = documentBookRepository.findAllByDeletedFalseOrderByIdAsc();
+        } else {
+            books = documentBookRepository
+                    .findAllByBookTypeCodeAndDeletedFalseOrderByIdAsc(typeCode.trim().toUpperCase());
         }
-        return result;
+        return books.stream().map(this::toResponse).toList();
     }
 
     //lấy sổ theo ID
@@ -77,9 +82,17 @@ public class DocumentBookServiceImpl implements DocumentBookService {
         if (hasChildren) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Không thể xóa: sổ này còn có sổ con");
         }
-
+        if (hasDocuments(id)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không thể xóa: sổ này đã có văn bản");
+        }
         book.setDeleted(true);
         documentBookRepository.save(book);
+    }
+
+    private boolean hasDocuments(Long bookId) {
+        return incomingRepository.existsByDocumentBookIdAndDeletedFalse(bookId)
+                || outgoingRepository.existsByDocumentBookIdAndDeletedFalse(bookId)
+                || internalRepository.existsByDocumentBookIdAndDeletedFalse(bookId);
     }
 
     private DocumentBookResponse toResponse(DocumentBook documentBook) {
@@ -90,14 +103,16 @@ public class DocumentBookServiceImpl implements DocumentBookService {
             parentId = documentBook.getParent().getId();
             parentName = documentBook.getParent().getName();
         }
-
+        DocumentBookType type = documentBook.getBookType();
         return new DocumentBookResponse(
                 documentBook.getId(),
                 documentBook.getName(),
                 documentBook.getShortName(),
-                documentBook.getStandardDays(),
                 parentId,
-                parentName
+                parentName,
+                type != null ? type.getId() : null,
+                type != null ? type.getCode() : null,
+                type != null ? type.getName() : null
         );
     }
 
@@ -120,15 +135,22 @@ public class DocumentBookServiceImpl implements DocumentBookService {
             book.setShortName(shortName.trim());
         }
 
-        book.setStandardDays(request.getStandardDays());
-
+        DocumentBookType type = bookTypeRepository.findById(request.getBookTypeId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Loại sổ không tồn tại"));
+        if (book.getId() != null && book.getBookType() != null
+                && !book.getBookType().getId().equals(type.getId())) {
+            if (documentBookRepository.existsByParentIdAndDeletedFalse(book.getId()) || hasDocuments(book.getId())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Không thể đổi loại sổ vì sổ này đã có sổ con hoặc văn bản");
+            }
+        }
         //Sổ cha
-        DocumentBook parent =findParent(book, request.getParentId());
-        book.setParent(parent);
+        book.setBookType(type);
+        book.setParent(findParent(book, request.getParentId(), type));
     }
 
     //Tìm sổ cha theo parentId
-    private DocumentBook findParent(DocumentBook book, Long parentId) {
+    private DocumentBook findParent(DocumentBook book, Long parentId, DocumentBookType type) {
         if(parentId == null) {
             return null;
         }

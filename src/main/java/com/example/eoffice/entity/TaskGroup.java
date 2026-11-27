@@ -29,6 +29,10 @@ public class TaskGroup {
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "creator_id")
+    private User creator;
+
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
             name = "task_group_members",

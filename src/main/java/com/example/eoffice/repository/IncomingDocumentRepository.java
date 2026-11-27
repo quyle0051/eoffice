@@ -45,6 +45,8 @@ public interface IncomingDocumentRepository extends JpaRepository<IncomingDocume
     @EntityGraph(attributePaths = {"documentBook", "documentType", "currentHandler", "participants"})
     Optional<IncomingDocument> findByIdAndDeletedFalse(Long id);
 
+    boolean existsByDocumentBookIdAndDeletedFalse(Long bookId);
+
     /** Dùng để dựng lại index Elasticsearch theo từng lô. */
     Page<IncomingDocument> findByDeletedFalse(Pageable pageable);
 
